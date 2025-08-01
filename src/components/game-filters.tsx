@@ -1,28 +1,18 @@
-"use client";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Genre } from "@/types/genre";
 import { Search } from "lucide-react";
 
 interface GameFiltersProps {
+  genres: Genre[];
   selectedGenre: string;
   onGenreChange: (genre: string) => void;
   searchTerm: string;
   onSearchChange: (term: string) => void;
 }
 
-const genres = [
-  { id: "all", name: "Todos" },
-  { id: "action", name: "Ação" },
-  { id: "adventure", name: "Aventura" },
-  { id: "rpg", name: "RPG" },
-  { id: "fps", name: "FPS" },
-  { id: "strategy", name: "Estratégia" },
-  { id: "sports", name: "Esportes" },
-  { id: "racing", name: "Corrida" },
-];
-
 export function GameFilters({
+  genres,
   selectedGenre,
   onGenreChange,
   searchTerm,

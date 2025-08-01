@@ -4,25 +4,42 @@ import { useAuth } from "@/components/auth-provider";
 import { Navbar } from "@/components/navbar";
 import { GameFeed } from "@/components/game-feed";
 import { GameFilters } from "@/components/game-filters";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { redirect } from "next/navigation";
+import { useToast } from "@/hooks/use-toast";
+import { Genre } from "@/types/genre";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function HomePage() {
   const { user, loading } = useAuth();
   const [selectedGenre, setSelectedGenre] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [genres, setGenres] = useState<Genre[]>([]);
+  const { toast } = useToast();
 
-  if (loading) {
+  useEffect(() => {
+    if (!user && !loading) redirect("/auth/login");
+    if (user) getGenres();
+  }, [user, loading]);
+
+  const getGenres = async () => {
+    let { data: Genre, error } = await supabase.from("Genre").select("*");
+    console.log("Aquiii", Genre);
+    if (error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar gêneros. Tente novamente.",
+        variant: "destructive",
+      });
+    setGenres(Genre || []);
+  };
+
+  if (loading)
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
       </div>
     );
-  }
-
-  if (!user) {
-    redirect("/auth/login");
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -39,6 +56,7 @@ export default function HomePage() {
         </div>
 
         <GameFilters
+          genres={genres}
           selectedGenre={selectedGenre}
           onGenreChange={setSelectedGenre}
           searchTerm={searchTerm}
