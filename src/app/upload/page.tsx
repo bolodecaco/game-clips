@@ -1,7 +1,6 @@
 "use client";
 
 import type React from "react";
-
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Navbar } from "@/components/navbar";
@@ -23,34 +22,30 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Upload, ImageIcon, X } from "lucide-react";
+import { Upload, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import { set } from "date-fns";
 import { Genre } from "@/types/genre";
+import { Game } from "@/types/game";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 
-const games = [
-  "Counter-Strike 2",
-  "Valorant",
-  "League of Legends",
-  "Cyberpunk 2077",
-  "Elden Ring",
-  "God of War",
-  "The Witcher 3",
-  "Minecraft",
-  "Fortnite",
-  "Apex Legends",
-];
+const uploadSchema = z.object({
+  title: z.string().min(1, "Título obrigatório"),
+  description: z.string().min(1, "Descrição obrigatória"),
+  game: z.string().min(1, "Selecione um jogo"),
+  genre: z.string().min(1, "Selecione um gênero"),
+});
+
+type UploadFormData = z.infer<typeof uploadSchema>;
 
 export default function UploadPage() {
   const { user, loading } = useAuth();
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [game, setGame] = useState("");
   const [genres, setGenres] = useState<Genre[]>([]);
-  const [genre, setGenre] = useState("");
+  const [games, setGames] = useState<Game[]>([]);
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<"image" | "video" | null>(null);
@@ -58,8 +53,20 @@ export default function UploadPage() {
   const { toast } = useToast();
   const router = useRouter();
 
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    formState: { errors },
+    reset,
+  } = useForm<UploadFormData>({
+    resolver: zodResolver(uploadSchema),
+  });
+
   useEffect(() => {
+    if (!user) redirect("/auth/login");
     getGenres();
+    getGames();
   }, []);
 
   if (loading) {
@@ -68,10 +75,6 @@ export default function UploadPage() {
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
       </div>
     );
-  }
-
-  if (!user) {
-    redirect("/auth/login");
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -112,14 +115,11 @@ export default function UploadPage() {
     setMediaType(null);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!title || !description || !game || !genre || !mediaFile) {
+  const onSubmit = async (data: UploadFormData) => {
+    if (!mediaFile) {
       toast({
         title: "Erro",
-        description:
-          "Por favor, preencha todos os campos e selecione um arquivo.",
+        description: "Por favor, selecione um arquivo de mídia.",
         variant: "destructive",
       });
       return;
@@ -129,12 +129,12 @@ export default function UploadPage() {
 
     try {
       await new Promise((resolve) => setTimeout(resolve, 2000));
-
       toast({
         title: "Sucesso!",
         description: "Seu conteúdo foi publicado com sucesso.",
       });
-
+      reset();
+      removeMedia();
       router.push("/");
     } catch (error) {
       toast({
@@ -148,14 +148,25 @@ export default function UploadPage() {
   };
 
   const getGenres = async () => {
-    let { data: Genre, error } = await supabase.from("Genre").select("*");
+    let { data: genres, error } = await supabase.from("Genre").select("*");
     if (error)
       toast({
         title: "Erro",
         description: "Erro ao carregar gêneros. Tente novamente.",
         variant: "destructive",
       });
-    setGenres(Genre || []);
+    setGenres(genres || []);
+  };
+
+  const getGames = async () => {
+    let { data: games, error } = await supabase.from("Game").select("*");
+    if (error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar jogos. Tente novamente.",
+        variant: "destructive",
+      });
+    setGames(games || []);
   };
 
   return (
@@ -170,9 +181,8 @@ export default function UploadPage() {
             </CardDescription>
           </CardHeader>
 
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit(onSubmit)}>
             <CardContent className="space-y-6">
-              {/* Upload de mídia */}
               <div className="space-y-2">
                 <Label>Mídia</Label>
                 {!mediaPreview ? (
@@ -197,7 +207,7 @@ export default function UploadPage() {
                 ) : (
                   <div className="relative">
                     {mediaType === "image" ? (
-                      <ImageIcon
+                      <img
                         src={mediaPreview}
                         alt="Preview"
                         className="w-full h-64 object-cover rounded-lg"
@@ -220,54 +230,78 @@ export default function UploadPage() {
                     </Button>
                   </div>
                 )}
+                {!mediaFile && (
+                  <span className="text-sm text-destructive">
+                    Por favor, selecione um arquivo de mídia.
+                  </span>
+                )}
               </div>
 
-              {/* Título */}
               <div className="space-y-2">
                 <Label htmlFor="title">Título</Label>
                 <Input
                   id="title"
                   placeholder="Dê um título épico para seu conteúdo..."
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  required
+                  {...register("title")}
                 />
+                {errors.title && (
+                  <span className="text-sm text-destructive">
+                    {errors.title.message}
+                  </span>
+                )}
               </div>
 
-              {/* Descrição */}
               <div className="space-y-2">
                 <Label htmlFor="description">Descrição</Label>
                 <Textarea
                   id="description"
                   placeholder="Conte a história por trás deste momento..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
                   rows={4}
-                  required
+                  {...register("description")}
                 />
+                {errors.description && (
+                  <span className="text-sm text-destructive">
+                    {errors.description.message}
+                  </span>
+                )}
               </div>
 
-              {/* Jogo */}
               <div className="space-y-2">
                 <Label htmlFor="game">Jogo</Label>
-                <Select value={game} onValueChange={setGame} required>
+                <Select
+                  value={undefined}
+                  onValueChange={(value) =>
+                    setValue("game", value, { shouldValidate: true })
+                  }
+                  required
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o jogo" />
                   </SelectTrigger>
                   <SelectContent>
-                    {games.map((gameName) => (
-                      <SelectItem key={gameName} value={gameName}>
-                        {gameName}
+                    {games.map((gameItem) => (
+                      <SelectItem key={gameItem.id} value={String(gameItem.id)}>
+                        {gameItem.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {errors.game && (
+                  <span className="text-sm text-destructive">
+                    {errors.game.message}
+                  </span>
+                )}
               </div>
 
-              {/* Gênero */}
               <div className="space-y-2">
                 <Label htmlFor="genre">Gênero</Label>
-                <Select value={genre} onValueChange={setGenre} required>
+                <Select
+                  value={undefined}
+                  onValueChange={(value) =>
+                    setValue("genre", value, { shouldValidate: true })
+                  }
+                  required
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o gênero" />
                   </SelectTrigger>
@@ -282,6 +316,11 @@ export default function UploadPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {errors.genre && (
+                  <span className="text-sm text-destructive">
+                    {errors.genre.message}
+                  </span>
+                )}
               </div>
 
               <Button type="submit" className="w-full" disabled={uploading}>
