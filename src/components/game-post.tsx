@@ -14,35 +14,26 @@ import { Heart, MessageCircle, Share2, Play } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import Link from "next/link";
-
-interface Post {
-  id: string;
-  title: string;
-  description: string;
-  game: string;
-  genre: string;
-  mediaType: "video" | "image";
-  mediaUrl: string;
-  thumbnail?: string;
-  author: {
-    username: string;
-    avatar: string;
-  };
-  likes: number;
-  comments: number;
-  createdAt: string;
-  isLiked: boolean;
-}
+import { Publication } from "@/types/publication";
 
 interface GamePostProps {
-  post: Post;
-  onLike: (postId: string) => void;
+  post: Publication;
+  onLike: (postId: string, isCurrentlyLiked: boolean) => void;
 }
 
 export function GamePost({ post, onLike }: GamePostProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [isLiked, setIsLiked] = useState(post.isLiked);
+  const [likesCount, setLikesCount] = useState(post.likes);
+  
+  const handleLikeClick = () => {
+    const newIsLiked = !isLiked;
+    setIsLiked(newIsLiked);
+    setLikesCount(prev => newIsLiked ? prev + 1 : prev - 1);
+    onLike(post.id, isLiked);
+  };
 
-  const timeAgo = formatDistanceToNow(new Date(post.createdAt), {
+  const timeAgo = formatDistanceToNow(new Date(post.created_at), {
     addSuffix: true,
     locale: ptBR,
   });
@@ -57,19 +48,17 @@ export function GamePost({ post, onLike }: GamePostProps) {
         <div className="flex items-center space-x-3">
           <Avatar className="h-10 w-10">
             <AvatarImage
-              src={post.author.avatar || "/placeholder.svg"}
-              alt={post.author.username}
+              src={post.author_avatar || "/placeholder.svg"}
+              alt={post.author_name}
             />
-            <AvatarFallback>
-              {post.author.username[0].toUpperCase()}
-            </AvatarFallback>
+            <AvatarFallback>{post.author_name[0].toUpperCase()}</AvatarFallback>
           </Avatar>
           <div className="flex-1">
-            <p className="font-semibold text-sm">{post.author.username}</p>
+            <p className="font-semibold text-sm">{post.author_name}</p>
             <p className="text-xs text-muted-foreground">{timeAgo}</p>
           </div>
           <Badge variant="secondary" className="text-xs">
-            {post.game}
+            {post.gameData?.name}
           </Badge>
         </div>
       </CardHeader>
@@ -123,15 +112,15 @@ export function GamePost({ post, onLike }: GamePostProps) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => onLike(post.id)}
+              onClick={handleLikeClick}
               className={`transition-all duration-200 hover:scale-110 ${
-                post.isLiked ? "text-red-500" : ""
+                isLiked ? "text-red-500" : ""
               }`}
             >
               <Heart
-                className={`h-4 w-4 mr-1 ${post.isLiked ? "fill-current" : ""}`}
+                className={`h-4 w-4 mr-1 ${isLiked ? "fill-current" : ""}`}
               />
-              {post.likes}
+              {likesCount}
             </Button>
 
             <Button variant="ghost" size="sm" asChild>

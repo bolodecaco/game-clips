@@ -15,6 +15,8 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useParams } from "next/navigation";
 import { redirect } from "next/navigation";
+import { Publication } from "@/types/publication";
+import { supabase } from "@/lib/supabaseClient";
 
 interface Comment {
   id: string;
@@ -26,70 +28,46 @@ interface Comment {
   createdAt: string;
 }
 
-interface Post {
-  id: string;
-  title: string;
-  description: string;
-  game: string;
-  genre: string;
-  mediaType: "video" | "image";
-  mediaUrl: string;
-  author: {
-    username: string;
-    avatar: string;
-  };
-  likes: number;
-  comments: Comment[];
-  createdAt: string;
-  isLiked: boolean;
-}
-
 export default function PostPage() {
   const { user, loading } = useAuth();
   const params = useParams();
-  const [post, setPost] = useState<Post | null>(null);
+  const [post, setPost] = useState<Publication | null>(null);
+  const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
 
   useEffect(() => {
-    const mockPost: Post = {
-      id: params.id as string,
-      title: "Clutch épico no CS2!",
-      description:
-        "Consegui um ace incrível na última rodada. A tensão estava no máximo! Foi uma das partidas mais intensas que já joguei. O time adversário estava dominando o jogo inteiro, mas conseguimos virar nos últimos rounds.",
-      game: "Counter-Strike 2",
-      genre: "fps",
-      mediaType: "video",
-      mediaUrl: "/placeholder.svg?height=400&width=600",
-      author: {
-        username: "ProGamer123",
-        avatar: "/placeholder.svg?height=40&width=40",
-      },
-      likes: 245,
-      isLiked: false,
-      createdAt: "2024-01-15T10:30:00Z",
-      comments: [
-        {
-          id: "1",
+    const fetchPost = async () => {
+      const { data, error } = await supabase
+        .from("Publication")
+        .select("*, gameData:Game (*)")
+        .eq("id", params.id)
+        .single();
+
+      if (error) {
+        console.error("Erro ao buscar post:", error);
+        return;
+      }
+
+      if (data) {
+        const publication: Publication = {
+          ...data,
           author: {
-            username: "GamerFan",
-            avatar: "/placeholder.svg?height=32&width=32",
+            username: data.author_username || "Usuário",
+            avatar: data.author_avatar,
           },
-          content: "Que jogada incrível! Parabéns pelo ace!",
-          createdAt: "2024-01-15T11:00:00Z",
-        },
-        {
-          id: "2",
-          author: {
-            username: "CSPro",
-            avatar: "/placeholder.svg?height=32&width=32",
-          },
-          content: "Essa mira está afiada! Qual sua config?",
-          createdAt: "2024-01-15T11:15:00Z",
-        },
-      ],
+          mediaType: data.media_type || "image",
+          likes: data.likes || 0,
+          comments: data.comments_count || 0,
+          isLiked: false,
+        };
+        setPost(publication);
+      }
     };
-    setPost(mockPost);
+
+    if (params.id) {
+      fetchPost();
+    }
   }, [params.id]);
 
   if (loading) {
@@ -138,9 +116,6 @@ export default function PostPage() {
 
     setSubmittingComment(true);
 
-    // Simular envio de comentário
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
     const comment: Comment = {
       id: Date.now().toString(),
       author: {
@@ -151,20 +126,12 @@ export default function PostPage() {
       createdAt: new Date().toISOString(),
     };
 
-    setPost((prev) =>
-      prev
-        ? {
-            ...prev,
-            comments: [...prev.comments, comment],
-          }
-        : null
-    );
-
+    setComments((prev) => [...prev, comment]);
     setNewComment("");
     setSubmittingComment(false);
   };
 
-  const timeAgo = formatDistanceToNow(new Date(post.createdAt), {
+  const timeAgo = formatDistanceToNow(new Date(post.created_at), {
     addSuffix: true,
     locale: ptBR,
   });
@@ -174,25 +141,24 @@ export default function PostPage() {
       <Navbar />
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="grid gap-8 lg:grid-cols-3">
-          {/* Conteúdo principal */}
           <div className="lg:col-span-2">
             <Card className="animate-fade-in">
               <CardHeader>
                 <div className="flex items-center space-x-3 mb-4">
                   <Avatar className="h-12 w-12">
                     <AvatarImage
-                      src={post.author.avatar || "/placeholder.svg"}
-                      alt={post.author.username}
+                      src={post.author_avatar || "/placeholder.svg"}
+                      alt={post.author_name}
                     />
                     <AvatarFallback>
-                      {post.author.username[0].toUpperCase()}
+                      {post.author_name[0].toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1">
-                    <p className="font-semibold">{post.author.username}</p>
+                    <p className="font-semibold">{post.author_name}</p>
                     <p className="text-sm text-muted-foreground">{timeAgo}</p>
                   </div>
-                  <Badge variant="secondary">{post.game}</Badge>
+                  <Badge variant="secondary">{post.gameData?.name}</Badge>
                 </div>
 
                 <h1 className="text-2xl font-bold mb-2">{post.title}</h1>
@@ -205,7 +171,7 @@ export default function PostPage() {
                     <video
                       controls
                       className="w-full rounded-lg"
-                      poster="/placeholder.svg?height=400&width=600"
+                      poster={post.thumbnail}
                     >
                       <source src={post.mediaUrl} type="video/mp4" />
                       Seu navegador não suporta o elemento de vídeo.
@@ -239,7 +205,7 @@ export default function PostPage() {
 
                       <Button variant="ghost">
                         <MessageCircle className="h-5 w-5 mr-2" />
-                        {post.comments.length}
+                        {comments.length}
                       </Button>
                     </div>
 
@@ -252,9 +218,7 @@ export default function PostPage() {
             </Card>
           </div>
 
-          {/* Sidebar com comentários */}
           <div className="space-y-6">
-            {/* Formulário de comentário */}
             <Card className="animate-slide-up">
               <CardHeader>
                 <h3 className="font-semibold">Adicionar comentário</h3>
@@ -280,18 +244,17 @@ export default function PostPage() {
               </CardContent>
             </Card>
 
-            {/* Lista de comentários */}
             <Card
               className="animate-slide-up"
               style={{ animationDelay: "0.1s" }}
             >
               <CardHeader>
                 <h3 className="font-semibold">
-                  Comentários ({post.comments.length})
+                  Comentários ({comments.length})
                 </h3>
               </CardHeader>
               <CardContent className="space-y-4">
-                {post.comments.map((comment) => (
+                {comments.map((comment) => (
                   <div key={comment.id} className="flex space-x-3">
                     <Avatar className="h-8 w-8">
                       <AvatarImage
@@ -319,7 +282,7 @@ export default function PostPage() {
                   </div>
                 ))}
 
-                {post.comments.length === 0 && (
+                {comments.length === 0 && (
                   <p className="text-center text-muted-foreground py-8">
                     Seja o primeiro a comentar!
                   </p>

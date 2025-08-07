@@ -32,6 +32,7 @@ import { Game } from "@/types/game";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { title } from "process";
 
 const uploadSchema = z.object({
   title: z.string().min(1, "Título obrigatório"),
@@ -128,14 +129,22 @@ export default function UploadPage() {
     setUploading(true);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await supabase.from("Publication").insert({
+        title: data.title,
+        description: data.description,
+        mediaUrl:
+          "https://xvhylgmuvzxftusmyhgl.supabase.co/storage/v1/object/public/gamepedia/r6.jpeg",
+        game: data.game,
+        thumbnail:
+          "https://xvhylgmuvzxftusmyhgl.supabase.co/storage/v1/object/public/gamepedia/r6.jpeg",
+        author_name: user?.username,
+        author_avatar: user?.avatar,
+        media_type: mediaType,
+      });
       toast({
         title: "Sucesso!",
         description: "Seu conteúdo foi publicado com sucesso.",
       });
-      reset();
-      removeMedia();
-      router.push("/");
     } catch (error) {
       toast({
         title: "Erro",
@@ -144,6 +153,9 @@ export default function UploadPage() {
       });
     } finally {
       setUploading(false);
+      reset();
+      removeMedia();
+      router.push("/");
     }
   };
 
