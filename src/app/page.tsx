@@ -24,7 +24,6 @@ export default function HomePage() {
 
   const getGenres = async () => {
     let { data: Genre, error } = await supabase.from("Genre").select("*");
-    console.log("Aquiii", Genre);
     if (error)
       toast({
         title: "Erro",

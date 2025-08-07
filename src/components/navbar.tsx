@@ -93,9 +93,6 @@ export function Navbar() {
               <Button variant="ghost" asChild>
                 <Link href="/auth/login">Entrar</Link>
               </Button>
-              <Button asChild>
-                <Link href="/auth/register">Cadastrar</Link>
-              </Button>
             </div>
           )}
         </div>
