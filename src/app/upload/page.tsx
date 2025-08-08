@@ -116,6 +116,27 @@ export default function UploadPage() {
     setMediaType(null);
   };
 
+  const uploadFileToSupabase = async (file: File) => {
+    const { error } = await supabase.storage
+      .from("gamepedia")
+      .upload(`uploads/${file.name}`, file, {
+        cacheControl: "3600",
+        upsert: true,
+      });
+    if (error) {
+      toast({
+        title: "Erro",
+        description: "Erro ao fazer upload do arquivo. Tente novamente.",
+        variant: "destructive",
+      });
+      throw error;
+    }
+    const { data: media } = supabase.storage
+      .from("gamepedia")
+      .getPublicUrl(`uploads/${file.name}`);
+    return media.publicUrl;
+  };
+
   const onSubmit = async (data: UploadFormData) => {
     if (!mediaFile) {
       toast({
@@ -127,16 +148,15 @@ export default function UploadPage() {
     }
 
     setUploading(true);
+    const mediaPath = await uploadFileToSupabase(mediaFile);
 
     try {
       await supabase.from("Publication").insert({
         title: data.title,
         description: data.description,
-        mediaUrl:
-          "https://xvhylgmuvzxftusmyhgl.supabase.co/storage/v1/object/public/gamepedia/r6.jpeg",
+        mediaUrl: mediaPath,
         game: data.game,
-        thumbnail:
-          "https://xvhylgmuvzxftusmyhgl.supabase.co/storage/v1/object/public/gamepedia/r6.jpeg",
+        thumbnail: mediaPath,
         author_name: user?.username,
         author_avatar: user?.avatar,
         media_type: mediaType,
