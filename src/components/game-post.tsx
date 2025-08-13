@@ -70,7 +70,12 @@ export function GamePost({ post, onLike }: GamePostProps) {
             {post.mediaType === "video" ? (
               <div className="relative">
                 <img
-                  src={post.thumbnail || post.mediaUrl}
+                  src={post.thumbnail || "/placeholder.svg"}
+                  onError={(e) => {
+                    const target = e.currentTarget as HTMLImageElement;
+                    if (target.src !== "/placeholder.svg")
+                      target.src = "/placeholder.svg";
+                  }}
                   alt={post.title}
                   className="w-full h-48 object-cover transition-transform duration-300 group-hover:scale-105"
                 />
@@ -81,6 +86,11 @@ export function GamePost({ post, onLike }: GamePostProps) {
             ) : (
               <img
                 src={post.mediaUrl || "/placeholder.svg"}
+                onError={(e) => {
+                  const target = e.currentTarget as HTMLImageElement;
+                  if (target.src !== "/placeholder.svg")
+                    target.src = "/placeholder.svg";
+                }}
                 alt={post.title}
                 className="w-full h-48 object-cover transition-transform duration-300 group-hover:scale-105"
               />

@@ -1,13 +1,8 @@
 "use client";
 
-import type React from "react";
-import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Navbar } from "@/components/navbar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
@@ -15,6 +10,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -22,17 +19,128 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Upload, X } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { useRouter } from "next/navigation";
-import { redirect } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import { Genre } from "@/types/genre";
 import { Game } from "@/types/game";
+import { Genre } from "@/types/genre";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Upload, X } from "lucide-react";
+import { redirect, useRouter } from "next/navigation";
+import type React from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { title } from "process";
+
+// Gera um caminho seguro para o arquivo no Storage, removendo acentos e caracteres inválidos
+function generateSafeFilePath(file: File, userId?: string) {
+  const originalName = file.name;
+  const lastDotIndex = originalName.lastIndexOf(".");
+  const baseName =
+    lastDotIndex === -1 ? originalName : originalName.slice(0, lastDotIndex);
+  const extension =
+    lastDotIndex === -1 ? "" : originalName.slice(lastDotIndex + 1);
+
+  // Remove acentos e normaliza para ASCII
+  const asciiBase = baseName.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  // Substitui espaços por hífens e remove caracteres inválidos
+  const cleanedBase = asciiBase
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9._-]/g, "");
+
+  // Garante que não fique vazio
+  const safeBase = cleanedBase.length > 0 ? cleanedBase : "arquivo";
+
+  // Limita tamanho do nome base
+  const truncatedBase = safeBase.slice(0, 80);
+
+  const safeExt = extension
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "");
+
+  const timestamp = Date.now();
+  const owner = userId ? String(userId) : "anon";
+  const fileName = safeExt
+    ? `${owner}-${timestamp}-${truncatedBase}.${safeExt}`
+    : `${owner}-${timestamp}-${truncatedBase}`;
+  return `uploads/${fileName}`;
+}
+
+// Extrai um thumbnail (frame) de um arquivo de vídeo como imagem JPEG
+async function extractVideoThumbnail(
+  file: File,
+  options?: { seekTimeSeconds?: number; quality?: number }
+): Promise<File> {
+  const seekTimeSeconds = options?.seekTimeSeconds ?? 1;
+  const quality = options?.quality ?? 0.8;
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const videoEl = document.createElement("video");
+    videoEl.src = objectUrl;
+    videoEl.crossOrigin = "anonymous";
+    videoEl.muted = true;
+
+    await new Promise<void>((resolve, reject) => {
+      videoEl.addEventListener("loadedmetadata", () => {
+        try {
+          const duration = Number.isFinite(videoEl.duration)
+            ? videoEl.duration
+            : 0;
+          // Busca em 1s ou no meio do vídeo, o que fizer sentido
+          const targetTime =
+            isNaN(duration) || duration <= 0
+              ? seekTimeSeconds
+              : Math.min(
+                  Math.max(0.1, seekTimeSeconds),
+                  Math.max(0.1, duration / 2)
+                );
+          const onSeeked = () => {
+            videoEl.removeEventListener("seeked", onSeeked);
+            resolve();
+          };
+          videoEl.addEventListener("seeked", onSeeked);
+          videoEl.currentTime = targetTime;
+        } catch (err) {
+          reject(err);
+        }
+      });
+      videoEl.addEventListener("error", () =>
+        reject(new Error("Falha ao carregar vídeo para thumbnail"))
+      );
+    });
+
+    const width = videoEl.videoWidth || 1280;
+    const height = videoEl.videoHeight || 720;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas context não disponível");
+    ctx.drawImage(videoEl, 0, 0, width, height);
+
+    const blob: Blob = await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("Falha ao gerar thumbnail"))),
+        "image/jpeg",
+        quality
+      );
+    });
+
+    // Define um nome que preserve o base name e inclua o sufixo -thumb
+    const originalName = file.name;
+    const lastDotIndex = originalName.lastIndexOf(".");
+    const baseName =
+      lastDotIndex === -1 ? originalName : originalName.slice(0, lastDotIndex);
+    const thumbName = `${baseName}-thumb.jpg`;
+
+    return new File([blob], thumbName, { type: "image/jpeg" });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
 
 const uploadSchema = z.object({
   title: z.string().min(1, "Título obrigatório"),
@@ -117,11 +225,16 @@ export default function UploadPage() {
   };
 
   const uploadFileToSupabase = async (file: File) => {
+    const filePath = generateSafeFilePath(
+      file,
+      user?.id as unknown as string | undefined
+    );
     const { error } = await supabase.storage
       .from("gamepedia")
-      .upload(`uploads/${file.name}`, file, {
+      .upload(filePath, file, {
         cacheControl: "3600",
         upsert: true,
+        contentType: file.type,
       });
     if (error) {
       toast({
@@ -133,7 +246,7 @@ export default function UploadPage() {
     }
     const { data: media } = supabase.storage
       .from("gamepedia")
-      .getPublicUrl(`uploads/${file.name}`);
+      .getPublicUrl(filePath);
     return media.publicUrl;
   };
 
@@ -148,15 +261,27 @@ export default function UploadPage() {
     }
 
     setUploading(true);
-    const mediaPath = await uploadFileToSupabase(mediaFile);
+    const mediaUrl = await uploadFileToSupabase(mediaFile);
+    let thumbnailUrl = mediaUrl;
+    if (mediaType === "video") {
+      try {
+        const thumbFile = await extractVideoThumbnail(mediaFile, {
+          seekTimeSeconds: 1,
+        });
+        thumbnailUrl = await uploadFileToSupabase(thumbFile);
+      } catch (thumbErr) {
+        // Mantém thumbnail como mediaUrl apenas como último recurso para não quebrar
+        thumbnailUrl = "/placeholder.svg";
+      }
+    }
 
     try {
       await supabase.from("Publication").insert({
         title: data.title,
         description: data.description,
-        mediaUrl: mediaPath,
+        mediaUrl: mediaUrl,
         game: data.game,
-        thumbnail: mediaPath,
+        thumbnail: thumbnailUrl,
         author_name: user?.username,
         author_avatar: user?.avatar,
         media_type: mediaType,

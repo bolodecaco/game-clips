@@ -252,7 +252,7 @@ export default function PostPage() {
                     <video
                       controls
                       className="w-full rounded-lg"
-                      poster={post.thumbnail}
+                      poster={post.thumbnail || "/placeholder.svg"}
                     >
                       <source src={post.mediaUrl} type="video/mp4" />
                       Seu navegador não suporta o elemento de vídeo.
@@ -263,6 +263,11 @@ export default function PostPage() {
                     src={post.mediaUrl || "/placeholder.svg"}
                     alt={post.title}
                     className="w-full rounded-lg"
+                    onError={(e) => {
+                      const target = e.currentTarget as HTMLImageElement;
+                      if (target.src !== "/placeholder.svg")
+                        target.src = "/placeholder.svg";
+                    }}
                   />
                 )}
 
