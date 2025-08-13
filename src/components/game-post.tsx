@@ -1,20 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardFooter,
   CardHeader,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Heart, MessageCircle, Share2, Play } from "lucide-react";
+import { Publication } from "@/types/publication";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { AnimatePresence, motion } from "framer-motion";
+import { Heart, MessageCircle, Play, Share2 } from "lucide-react";
 import Link from "next/link";
-import { Publication } from "@/types/publication";
+import { useState } from "react";
 
 interface GamePostProps {
   post: Publication;
@@ -25,11 +26,11 @@ export function GamePost({ post, onLike }: GamePostProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isLiked, setIsLiked] = useState(post.isLiked);
   const [likesCount, setLikesCount] = useState(post.likes);
-  
+
   const handleLikeClick = () => {
     const newIsLiked = !isLiked;
     setIsLiked(newIsLiked);
-    setLikesCount(prev => newIsLiked ? prev + 1 : prev - 1);
+    setLikesCount((prev) => (newIsLiked ? prev + 1 : prev - 1));
     onLike(post.id, isLiked);
   };
 
@@ -115,11 +116,38 @@ export function GamePost({ post, onLike }: GamePostProps) {
               onClick={handleLikeClick}
               className={`transition-all duration-200 hover:scale-110 ${
                 isLiked ? "text-red-500" : ""
-              }`}
+              } relative`}
             >
-              <Heart
-                className={`h-4 w-4 mr-1 ${isLiked ? "fill-current" : ""}`}
-              />
+              <AnimatePresence>
+                {isLiked && (
+                  <motion.span
+                    key="like-burst"
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 2.1, opacity: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.45, ease: "easeOut" }}
+                    className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-red-500/40"
+                    aria-hidden
+                  />
+                )}
+              </AnimatePresence>
+
+              <motion.span
+                key={isLiked ? "liked" : "unliked"}
+                initial={{ scale: 1 }}
+                animate={{ scale: isLiked ? [1, 1.45, 1] : [1, 0.9, 1] }}
+                transition={{
+                  duration: 0.35,
+                  times: [0, 0.5, 1],
+                  ease: "easeOut",
+                }}
+                whileTap={{ scale: 0.85 }}
+                className="inline-flex items-center"
+              >
+                <Heart
+                  className={`h-4 w-4 mr-1 ${isLiked ? "fill-current" : ""}`}
+                />
+              </motion.span>
               {likesCount}
             </Button>
 

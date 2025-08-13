@@ -2,30 +2,30 @@
 
 import type React from "react";
 
-import { useState, useEffect } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Navbar } from "@/components/navbar";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Heart, MessageCircle, Share2, Send } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { supabase } from "@/lib/supabaseClient";
+import { Publication } from "@/types/publication";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useParams } from "next/navigation";
-import { redirect } from "next/navigation";
-import { Publication } from "@/types/publication";
-import { supabase } from "@/lib/supabaseClient";
+import { AnimatePresence, motion } from "framer-motion";
+import { Heart, MessageCircle, Send, Share2 } from "lucide-react";
+import { redirect, useParams } from "next/navigation";
+import { useEffect, useState } from "react";
 
 interface Comment {
-  id: string;
-  author: {
-    username: string;
-    avatar: string;
-  };
-  content: string;
-  createdAt: string;
+  id: number | string;
+  publication: number;
+  user_id: string | null;
+  author_name: string | null;
+  author_avatar: string | null;
+  content: string | null;
+  created_at: string;
 }
 
 export default function PostPage() {
@@ -35,6 +35,11 @@ export default function PostPage() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [hasMounted, setHasMounted] = useState(false);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   useEffect(() => {
     const fetchPost = async () => {
@@ -68,6 +73,62 @@ export default function PostPage() {
     if (params.id) {
       fetchPost();
     }
+  }, [params.id]);
+
+  useEffect(() => {
+    const fetchComments = async () => {
+      const { data, error } = await supabase
+        .from("Comment")
+        .select(
+          "id, publication, user_id, author_name, author_avatar, content, created_at"
+        )
+        .eq(
+          "publication",
+          typeof params.id === "string" ? Number(params.id) : (params.id as any)
+        )
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        const anyError = error as any;
+        console.error(
+          `Erro ao buscar comentários: message=${
+            anyError?.message || ""
+          } details=${anyError?.details || ""} hint=${anyError?.hint || ""}`
+        );
+        return;
+      }
+
+      setComments((data || []) as Comment[]);
+    };
+
+    if (params.id) {
+      fetchComments();
+    }
+  }, [params.id]);
+
+  useEffect(() => {
+    if (!params.id) return;
+
+    const channel = supabase
+      .channel(`comments-${params.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "Comment",
+          filter: `publication=eq.${params.id}`,
+        },
+        (payload) => {
+          const newComment = payload.new as Comment;
+          setComments((prev) => [...prev, newComment]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [params.id]);
 
   if (loading) {
@@ -112,36 +173,51 @@ export default function PostPage() {
 
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newComment.trim()) return;
+    if (!newComment.trim() || !user || !post) return;
 
     setSubmittingComment(true);
 
-    const comment: Comment = {
-      id: Date.now().toString(),
-      author: {
-        username: user.username,
-        avatar: user.avatar || "/placeholder.svg?height=32&width=32",
-      },
-      content: newComment,
-      createdAt: new Date().toISOString(),
-    };
+    const { data, error } = await supabase
+      .from("Comment")
+      .insert({
+        publication:
+          typeof post.id === "string" ? Number(post.id) : (post.id as any),
+        user_id: user.id,
+        content: newComment.trim(),
+        author_name: user.username,
+        author_avatar: user.avatar || "/placeholder.svg?height=32&width=32",
+      })
+      .select()
+      .single();
 
-    setComments((prev) => [...prev, comment]);
-    setNewComment("");
+    if (error) {
+      const anyError = error as any;
+      console.error(
+        `Erro ao enviar comentário: message=${
+          anyError?.message || ""
+        } details=${anyError?.details || ""} hint=${anyError?.hint || ""}`
+      );
+    } else if (data) {
+      setComments((prev) => [...prev, data as Comment]);
+      setNewComment("");
+    }
+
     setSubmittingComment(false);
   };
 
-  const timeAgo = formatDistanceToNow(new Date(post.created_at), {
-    addSuffix: true,
-    locale: ptBR,
-  });
+  const timeAgo = hasMounted
+    ? formatDistanceToNow(new Date(post.created_at), {
+        addSuffix: true,
+        locale: ptBR,
+      })
+    : "";
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="grid gap-8 lg:grid-cols-3">
-          <div className="lg:col-span-2">
+      <main className="container mx-auto px-4 py-8 max-w-5xl">
+        <div className="grid gap-8 lg:grid-cols-5">
+          <div className="lg:col-span-3">
             <Card className="animate-fade-in">
               <CardHeader>
                 <div className="flex items-center space-x-3 mb-4">
@@ -156,7 +232,12 @@ export default function PostPage() {
                   </Avatar>
                   <div className="flex-1">
                     <p className="font-semibold">{post.author_name}</p>
-                    <p className="text-sm text-muted-foreground">{timeAgo}</p>
+                    <p
+                      className="text-sm text-muted-foreground"
+                      suppressHydrationWarning
+                    >
+                      {timeAgo}
+                    </p>
                   </div>
                   <Badge variant="secondary">{post.gameData?.name}</Badge>
                 </div>
@@ -193,13 +274,42 @@ export default function PostPage() {
                         onClick={handleLike}
                         className={`transition-all duration-200 hover:scale-110 ${
                           post.isLiked ? "text-red-500" : ""
-                        }`}
+                        } relative`}
                       >
-                        <Heart
-                          className={`h-5 w-5 mr-2 ${
-                            post.isLiked ? "fill-current" : ""
-                          }`}
-                        />
+                        <AnimatePresence>
+                          {post.isLiked && (
+                            <motion.span
+                              key="like-burst"
+                              initial={{ scale: 0, opacity: 0 }}
+                              animate={{ scale: 2.1, opacity: 0 }}
+                              exit={{ opacity: 0 }}
+                              transition={{ duration: 0.45, ease: "easeOut" }}
+                              className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-red-500/40"
+                              aria-hidden
+                            />
+                          )}
+                        </AnimatePresence>
+
+                        <motion.span
+                          key={post.isLiked ? "liked" : "unliked"}
+                          initial={{ scale: 1 }}
+                          animate={{
+                            scale: post.isLiked ? [1, 1.45, 1] : [1, 0.9, 1],
+                          }}
+                          transition={{
+                            duration: 0.35,
+                            times: [0, 0.5, 1],
+                            ease: "easeOut",
+                          }}
+                          whileTap={{ scale: 0.85 }}
+                          className="inline-flex items-center"
+                        >
+                          <Heart
+                            className={`h-5 w-5 mr-2 ${
+                              post.isLiked ? "fill-current" : ""
+                            }`}
+                          />
+                        </motion.span>
                         {post.likes}
                       </Button>
 
@@ -218,7 +328,7 @@ export default function PostPage() {
             </Card>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-6 lg:col-span-2">
             <Card className="animate-slide-up">
               <CardHeader>
                 <h3 className="font-semibold">Adicionar comentário</h3>
@@ -255,29 +365,42 @@ export default function PostPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {comments.map((comment) => (
-                  <div key={comment.id} className="flex space-x-3">
+                  <div
+                    key={comment.id}
+                    className="flex space-x-3 overflow-hidden"
+                  >
                     <Avatar className="h-8 w-8">
                       <AvatarImage
-                        src={comment.author.avatar || "/placeholder.svg"}
-                        alt={comment.author.username}
+                        src={comment.author_avatar || "/placeholder.svg"}
+                        alt={comment.author_name || "Usuário"}
                       />
                       <AvatarFallback>
-                        {comment.author.username[0].toUpperCase()}
+                        {comment.author_name?.[0]?.toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2 mb-1">
                         <p className="font-semibold text-sm">
-                          {comment.author.username}
+                          {comment.author_name}
                         </p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatDistanceToNow(new Date(comment.createdAt), {
-                            addSuffix: true,
-                            locale: ptBR,
-                          })}
+                        <p
+                          className="text-xs text-muted-foreground"
+                          suppressHydrationWarning
+                        >
+                          {hasMounted
+                            ? formatDistanceToNow(
+                                new Date(comment.created_at),
+                                {
+                                  addSuffix: true,
+                                  locale: ptBR,
+                                }
+                              )
+                            : ""}
                         </p>
                       </div>
-                      <p className="text-sm">{comment.content}</p>
+                      <p className="text-sm break-words whitespace-pre-wrap max-w-full overflow-hidden">
+                        {comment.content}
+                      </p>
                     </div>
                   </div>
                 ))}

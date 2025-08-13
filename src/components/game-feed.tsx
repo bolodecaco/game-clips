@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { GamePost } from "@/components/game-post";
 import { supabase } from "@/lib/supabaseClient";
 import { Publication } from "@/types/publication";
+import { useEffect, useState } from "react";
 
 interface GameFeedProps {
   selectedGenre: string;
@@ -23,7 +23,51 @@ export function GameFeed({ selectedGenre, searchTerm }: GameFeedProps) {
       console.error("Error fetching posts:", result.error);
       return;
     }
-    setPosts(result.data);
+    // Normaliza campos para o shape de Publication usado no front
+    const normalized = (result.data as any[]).map((row) => ({
+      ...row,
+      mediaType: row.media_type ?? row.mediaType ?? "image",
+      comments: row.comments_count ?? row.comments ?? 0,
+      likes: row.likes ?? 0,
+    }));
+
+    // Busca contagem de comentários por publicação e aplica no array
+    try {
+      const publicationIds = normalized
+        .map((p) => (typeof p.id === "string" ? Number(p.id) : p.id))
+        .filter((id) => Number.isFinite(id));
+
+      if (publicationIds.length > 0) {
+        const { data: commentsRows, error: commentsError } = await supabase
+          .from("Comment")
+          .select("publication")
+          .in("publication", publicationIds as number[]);
+
+        if (commentsError) {
+          console.error("Error fetching comments count:", commentsError);
+          setPosts(normalized);
+          return;
+        }
+
+        const countsMap = new Map<number, number>();
+        (commentsRows as any[])?.forEach((row) => {
+          const pubId = row.publication as number;
+          countsMap.set(pubId, (countsMap.get(pubId) ?? 0) + 1);
+        });
+
+        const withCounts = normalized.map((p) => {
+          const key = typeof p.id === "string" ? Number(p.id) : p.id;
+          return { ...p, comments: countsMap.get(key) ?? 0 };
+        });
+
+        setPosts(withCounts as any);
+      } else {
+        setPosts(normalized);
+      }
+    } catch (e) {
+      console.error("Unexpected error computing comments count:", e);
+      setPosts(normalized);
+    }
   };
 
   const handleLike = async (postId: string, isCurrentlyLiked: boolean) => {
