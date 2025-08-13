@@ -31,6 +31,15 @@ export function GameFilters({
       </div>
 
       <div className="flex flex-wrap gap-2">
+        <Button
+          key="all"
+          variant={selectedGenre === "all" ? "default" : "outline"}
+          size="sm"
+          onClick={() => onGenreChange("all")}
+          className="transition-all duration-200 hover:scale-105"
+        >
+          Todos
+        </Button>
         {genres.map((genre) => (
           <Button
             key={genre.id}

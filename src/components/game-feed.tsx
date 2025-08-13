@@ -15,12 +15,14 @@ export function GameFeed({ selectedGenre, searchTerm }: GameFeedProps) {
   const [loading, setLoading] = useState(false);
 
   const fetchData = async () => {
+    setLoading(true);
     const result = await supabase.from("Publication").select(`
         *,
         gameData:Game (*)
       `);
     if (result.error) {
       console.error("Error fetching posts:", result.error);
+      setLoading(false);
       return;
     }
     // Normaliza campos para o shape de Publication usado no front
@@ -31,9 +33,22 @@ export function GameFeed({ selectedGenre, searchTerm }: GameFeedProps) {
       likes: row.likes ?? 0,
     }));
 
-    // Busca contagem de comentários por publicação e aplica no array
+    // Aplica filtros em memória (gênero e busca)
+    const filtered = normalized.filter((p) => {
+      const genreOk =
+        selectedGenre === "all" || p.gameData?.genre === selectedGenre;
+      const term = searchTerm?.trim().toLowerCase();
+      if (!term) return genreOk;
+      const inTitle = p.title?.toLowerCase().includes(term);
+      const inDesc = p.description?.toLowerCase().includes(term);
+      const inAuthor = p.author_name?.toLowerCase().includes(term);
+      const inGame = p.gameData?.name?.toLowerCase().includes(term);
+      return genreOk && (inTitle || inDesc || inAuthor || inGame);
+    });
+
+    // Busca contagem de comentários por publicação apenas dos filtrados e aplica no array
     try {
-      const publicationIds = normalized
+      const publicationIds = filtered
         .map((p) => (typeof p.id === "string" ? Number(p.id) : p.id))
         .filter((id) => Number.isFinite(id));
 
@@ -45,7 +60,8 @@ export function GameFeed({ selectedGenre, searchTerm }: GameFeedProps) {
 
         if (commentsError) {
           console.error("Error fetching comments count:", commentsError);
-          setPosts(normalized);
+          setPosts(filtered);
+          setLoading(false);
           return;
         }
 
@@ -55,19 +71,20 @@ export function GameFeed({ selectedGenre, searchTerm }: GameFeedProps) {
           countsMap.set(pubId, (countsMap.get(pubId) ?? 0) + 1);
         });
 
-        const withCounts = normalized.map((p) => {
+        const withCounts = filtered.map((p) => {
           const key = typeof p.id === "string" ? Number(p.id) : p.id;
           return { ...p, comments: countsMap.get(key) ?? 0 };
         });
 
         setPosts(withCounts as any);
       } else {
-        setPosts(normalized);
+        setPosts(filtered);
       }
     } catch (e) {
       console.error("Unexpected error computing comments count:", e);
-      setPosts(normalized);
+      setPosts(filtered);
     }
+    setLoading(false);
   };
 
   const handleLike = async (postId: string, isCurrentlyLiked: boolean) => {
@@ -99,6 +116,10 @@ export function GameFeed({ selectedGenre, searchTerm }: GameFeedProps) {
     }
   };
 
+  useEffect(() => {
+    fetchData();
+  }, [selectedGenre, searchTerm]);
+
   if (loading) {
     return (
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -112,10 +133,6 @@ export function GameFeed({ selectedGenre, searchTerm }: GameFeedProps) {
       </div>
     );
   }
-
-  useEffect(() => {
-    fetchData();
-  }, []);
 
   return (
     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
