@@ -4,6 +4,7 @@ import type React from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { Navbar } from "@/components/navbar";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -248,27 +249,36 @@ export default function PostPage() {
 
               <CardContent className="p-0">
                 {post.mediaType === "video" ? (
-                  <div className="video-container">
-                    <video
-                      controls
-                      className="w-full rounded-lg"
-                      poster={post.thumbnail || "/placeholder.svg"}
-                    >
-                      <source src={post.mediaUrl} type="video/mp4" />
-                      Seu navegador não suporta o elemento de vídeo.
-                    </video>
-                  </div>
+                  <AspectRatio ratio={16 / 9}>
+                    <div className="relative w-full h-full overflow-hidden rounded-lg">
+                      <img
+                        src={post.thumbnail || "/placeholder.svg"}
+                        alt={post.title}
+                        className="absolute inset-0 h-full w-full object-cover blur-3xl scale-110 brightness-75"
+                      />
+                      <video
+                        controls
+                        className="absolute inset-0 h-full w-full object-contain"
+                        poster={post.thumbnail || "/placeholder.svg"}
+                      >
+                        <source src={post.mediaUrl} type="video/mp4" />
+                        Seu navegador não suporta o elemento de vídeo.
+                      </video>
+                    </div>
+                  </AspectRatio>
                 ) : (
-                  <img
-                    src={post.mediaUrl || "/placeholder.svg"}
-                    alt={post.title}
-                    className="w-full rounded-lg"
-                    onError={(e) => {
-                      const target = e.currentTarget as HTMLImageElement;
-                      if (target.src !== "/placeholder.svg")
-                        target.src = "/placeholder.svg";
-                    }}
-                  />
+                  <AspectRatio ratio={16 / 9}>
+                    <img
+                      src={post.mediaUrl || "/placeholder.svg"}
+                      alt={post.title}
+                      className="w-full h-full object-cover rounded-lg"
+                      onError={(e) => {
+                        const target = e.currentTarget as HTMLImageElement;
+                        if (target.src !== "/placeholder.svg")
+                          target.src = "/placeholder.svg";
+                      }}
+                    />
+                  </AspectRatio>
                 )}
 
                 <div className="p-6">

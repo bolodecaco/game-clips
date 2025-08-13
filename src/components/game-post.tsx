@@ -1,5 +1,6 @@
 "use client";
 
+import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,34 +68,46 @@ export function GamePost({ post, onLike }: GamePostProps) {
       <CardContent className="p-0">
         <Link href={`/post/${post.id}`}>
           <div className="relative group cursor-pointer">
-            {post.mediaType === "video" ? (
-              <div className="relative">
+            <AspectRatio ratio={16 / 9}>
+              {post.mediaType === "video" ? (
+                <div className="relative w-full h-full overflow-hidden">
+                  <img
+                    src={post.thumbnail || "/placeholder.svg"}
+                    alt={post.title}
+                    className="absolute inset-0 h-full w-full object-cover blur-2xl scale-110 brightness-75"
+                    onError={(e) => {
+                      const target = e.currentTarget as HTMLImageElement;
+                      if (target.src !== "/placeholder.svg")
+                        target.src = "/placeholder.svg";
+                    }}
+                  />
+                  <img
+                    src={post.thumbnail || "/placeholder.svg"}
+                    alt={post.title}
+                    className="absolute inset-0 h-full w-full object-contain transition-transform duration-300 group-hover:scale-105"
+                    onError={(e) => {
+                      const target = e.currentTarget as HTMLImageElement;
+                      if (target.src !== "/placeholder.svg")
+                        target.src = "/placeholder.svg";
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <Play className="h-12 w-12 text-white" />
+                  </div>
+                </div>
+              ) : (
                 <img
-                  src={post.thumbnail || "/placeholder.svg"}
+                  src={post.mediaUrl || "/placeholder.svg"}
                   onError={(e) => {
                     const target = e.currentTarget as HTMLImageElement;
                     if (target.src !== "/placeholder.svg")
                       target.src = "/placeholder.svg";
                   }}
                   alt={post.title}
-                  className="w-full h-48 object-cover transition-transform duration-300 group-hover:scale-105"
+                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                 />
-                <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <Play className="h-12 w-12 text-white" />
-                </div>
-              </div>
-            ) : (
-              <img
-                src={post.mediaUrl || "/placeholder.svg"}
-                onError={(e) => {
-                  const target = e.currentTarget as HTMLImageElement;
-                  if (target.src !== "/placeholder.svg")
-                    target.src = "/placeholder.svg";
-                }}
-                alt={post.title}
-                className="w-full h-48 object-cover transition-transform duration-300 group-hover:scale-105"
-              />
-            )}
+              )}
+            </AspectRatio>
 
             {isHovered && (
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-4 animate-fade-in">
